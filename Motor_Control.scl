@@ -1,0 +1,70 @@
+﻿FUNCTION_BLOCK "Motor_Control"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Mode : Int;   // 0 - NoSpeedControling 1- Speed Controling
+      Speed_Input_Mode_1 : Real;
+      Request_Run : Bool;
+      Request_Stop : Bool;
+      Time_Run : Time;
+      Stop_Delay : Time;
+   END_VAR
+
+   VAR_OUTPUT 
+      MotorStatus_Mode_0 : Bool;
+      MotorStatus_Mode_1 : DWord;
+   END_VAR
+
+   VAR 
+      Start : Bool;
+      Stop : Bool;
+      Convert_Value : DWord;
+      Run_Time {InstructionName := 'TOF_TIME'; LibVersion := '1.0'; S7_SetPoint := 'False'} : TOF_TIME;
+      Delay_Time {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+   END_VAR
+
+
+BEGIN
+	
+	// Timer Request RUN - How long the motor is working after start request.
+	#Run_Time(IN:= #Request_Run,
+	          PT:= #Time_Run);
+	// Timer Request STOP - How long the motor stop is delayed  after stop request
+	#Delay_Time(IN := #Request_Stop,
+	            PT := #Stop_Delay);
+	
+	// Conditions for start/stop requests
+	IF #Run_Time.Q AND NOT #Request_Stop THEN
+	    #Start := TRUE;
+	    #Stop := FALSE;
+	ELSIF #Delay_Time.Q THEN
+	    #Start := FALSE;
+	    #Stop := TRUE;
+	ELSE
+	    #Start := FALSE;
+	    #Stop := FALSE;
+	END_IF;
+	
+	
+	// Controlling the Output
+	CASE #Mode OF
+	    0:
+	        IF #Start AND NOT #Stop THEN
+	            #MotorStatus_Mode_0 := TRUE;
+	        ELSIF #Stop THEN
+	            #MotorStatus_Mode_0 := FALSE;
+	        END_IF;
+	        ;
+	    1:
+	        IF #Start AND NOT #Stop THEN
+	            #Convert_Value := REAL_TO_DWORD(#Speed_Input_Mode_1);
+	            #MotorStatus_Mode_1 := #Convert_Value;
+	        ELSIF #Stop OR NOT #Start THEN
+	            #MotorStatus_Mode_1 := 0;
+	            
+	        END_IF;
+	        ;
+	END_CASE;
+	
+END_FUNCTION_BLOCK
+

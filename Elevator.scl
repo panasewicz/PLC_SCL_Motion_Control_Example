@@ -1,0 +1,323 @@
+﻿FUNCTION_BLOCK "Elevator"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Mode_0_Load_1_Unload : Int;
+      Load_Unload_Base_Floor : Int;
+      Target_Floor_In : Int;
+      Load_Request : Bool;
+      Jam_Request_Lv1 : Bool;
+      Jam_Request_Lv2 : Bool;
+      Jam_Request_Lv3 : Bool;
+      Floor_1_Low : Bool;
+      Floor_1_High : Bool;
+      Floor_2_Low : Bool;
+      Floor_2_High : Bool;
+      Floor_3_Low : Bool;
+      Floor_3_High : Bool;
+      Load_From_Floor_1 : Bool;
+      Load_From_Floor_2 : Bool;
+      Load_From_Floor_3 : Bool;
+      At_Exit : Bool;
+      Load_Delay : Time;
+   END_VAR
+
+   VAR_OUTPUT 
+      MotorUp : Bool;
+      MotorDown : Bool;
+      Motor_Slow : Bool;
+      Load_Object : Bool;
+      UnLoad_Object : Bool;
+      Stop_Request_1 : Bool;
+      Stop_Request_2 : Bool;
+      Stop_Request_3 : Bool;
+   END_VAR
+
+   VAR 
+      CurrentFloor : Int;
+      TargetFloor : Int;
+      Elevetor_On_Base_Floor : Bool;
+      UnLock_Load_Request {InstructionName := 'F_TRIG'; LibVersion := '1.0'} : F_TRIG;
+      Load_Request_Deley_OFF {InstructionName := 'TOF_TIME'; LibVersion := '1.0'} : TOF_TIME;
+      Load_Request_Deley_OFF_Mode_1 {InstructionName := 'TOF_TIME'; LibVersion := '1.0'} : TOF_TIME;
+      Go_To_Load_Priority : Bool;
+      Load_Request_Mode_1 : Bool;
+      Choose_LoadFloor_Mode_1 : Int;
+      Box_Request_Array : Array[1..3] of Bool;
+      Box_Stop_Request_Array_1 : Array[1..3] of Bool;
+      i : Int;
+      Go_To_Unload_Prio : Bool;
+      Load_Request_1_Level : Int;
+   END_VAR
+
+
+BEGIN
+	CASE #Mode_0_Load_1_Unload OF  /////////////////////////////////////////////////////LOAD MODE
+	        
+	    0:
+	        
+	        #UnLock_Load_Request(CLK := #At_Exit);
+	        
+	        #Load_Request_Deley_OFF(IN := #Load_Request,
+	                                PT := #Load_Delay);
+	        
+	        IF (NOT #Elevetor_On_Base_Floor AND #Load_Request = True) OR #At_Exit THEN  // (#TargetFloor = 1 AND
+	            #Stop_Request_1 := True;
+	        ELSE
+	            #Stop_Request_1 := False;
+	        END_IF;
+	        
+	        
+	        IF #UnLock_Load_Request.Q = True THEN
+	            #UnLoad_Object := False;
+	            #Motor_Slow := False;
+	        END_IF;
+	        
+	        
+	        // Check Current Floor
+	        
+	        IF #Floor_1_Low = True AND #Floor_1_High = True THEN
+	            #CurrentFloor := 1;
+	        ELSIF #Floor_2_Low = True AND #Floor_2_High = True THEN
+	            #CurrentFloor := 2;
+	        ELSIF #Floor_3_Low = True AND #Floor_3_High = True THEN
+	            #CurrentFloor := 3;
+	        ELSE
+	            #Elevetor_On_Base_Floor := False;
+	        END_IF;
+	        
+	        
+	        // Goto_Load
+	        // 
+	        IF #Load_Request = True AND #CurrentFloor <> #Load_Unload_Base_Floor AND NOT #At_Exit THEN
+	            #Go_To_Load_Priority := True;
+	            #Motor_Slow := FALSE;
+	            IF #Load_Unload_Base_Floor > #CurrentFloor THEN
+	                #MotorUp := TRUE;
+	                #MotorDown := FALSE;
+	            ELSIF #Load_Unload_Base_Floor < #CurrentFloor THEN
+	                #MotorUp := FALSE;
+	                #MotorDown := TRUE;
+	            ELSE
+	                #MotorUp := FALSE;
+	                #MotorDown := FALSE;
+	                #Elevetor_On_Base_Floor := True;
+	            END_IF;
+	        END_IF;
+	        
+	        // Load
+	        //
+	        IF #Load_Request_Deley_OFF.Q = True AND #CurrentFloor = #Load_Unload_Base_Floor AND NOT #At_Exit THEN
+	            #Load_Object := True;
+	            #Go_To_Load_Priority := False;
+	            #Elevetor_On_Base_Floor := True;
+	            #TargetFloor := #Target_Floor_In;
+	            #Motor_Slow := False;
+	        ELSE
+	            #Load_Object := False;
+	        END_IF;
+	        
+	        // Going to Floor Request
+	        // 
+	        
+	        IF #CurrentFloor <> #TargetFloor AND #At_Exit AND NOT #Go_To_Load_Priority THEN
+	            
+	            IF #TargetFloor > #CurrentFloor THEN
+	                #MotorUp := TRUE;
+	                #MotorDown := FALSE;
+	            ELSIF #TargetFloor < #CurrentFloor THEN
+	                #MotorUp := FALSE;
+	                #MotorDown := TRUE;
+	            END_IF;
+	            
+	        ELSIF #CurrentFloor = #TargetFloor AND #At_Exit THEN   // Unload 
+	            #MotorUp := FALSE;
+	            #MotorDown := FALSE;
+	            
+	            CASE #TargetFloor OF
+	                    
+	                1:
+	                    IF #Jam_Request_Lv1 THEN
+	                        #UnLoad_Object := True;
+	                    END_IF;
+	                    
+	                2:
+	                    IF #Jam_Request_Lv2 THEN
+	                        #UnLoad_Object := True;
+	                    END_IF;
+	                    
+	                3:
+	                    IF #Jam_Request_Lv3 THEN
+	                        #UnLoad_Object := True;
+	                    END_IF;
+	            END_CASE;
+	            
+	        END_IF;
+	        
+	        IF NOT #Go_To_Load_Priority THEN
+	            CASE #TargetFloor OF
+	                    
+	                1:
+	                    IF #Floor_1_Low THEN
+	                        #Motor_Slow := True;
+	                    END_IF;
+	                    
+	                2:
+	                    IF #Floor_2_Low THEN
+	                        #Motor_Slow := True;
+	                    END_IF;
+	                    
+	                3:
+	                    IF #Floor_3_Low THEN
+	                        #Motor_Slow := True;
+	                    END_IF;
+	            END_CASE;
+	        END_IF; 
+	       
+	    1: //////////////////////////////////////////////////////////////////////////////UNLOAD MODE
+	        
+	        #Load_Request_Deley_OFF_Mode_1(IN := #Load_From_Floor_1 OR #Load_From_Floor_2 OR #Load_From_Floor_3,
+	                                       PT := #Load_Delay);
+	        
+	        IF (#CurrentFloor <> #Choose_LoadFloor_Mode_1 AND  NOT #Floor_3_High AND #Load_Request_Mode_1) OR (#Go_To_Unload_Prio AND  #At_Exit) OR #Box_Stop_Request_Array_1[1] OR #Box_Stop_Request_Array_1[2]  THEN
+	            #Stop_Request_3 := True;
+	        ELSE
+	            #Stop_Request_3 := False;
+	        END_IF;
+	        
+	        IF (#CurrentFloor <> #Choose_LoadFloor_Mode_1 AND NOT #Floor_2_High AND #Load_Request_Mode_1) OR (#Go_To_Unload_Prio AND #At_Exit) OR #Box_Stop_Request_Array_1[1] OR #Box_Stop_Request_Array_1[3] THEN
+	            #Stop_Request_2 := True;
+	        ELSE
+	            #Stop_Request_2 := False;
+	        END_IF;
+	        
+	        IF (#CurrentFloor <> #Choose_LoadFloor_Mode_1 AND  NOT #Floor_1_Low AND #Load_Request_Mode_1) OR (#Go_To_Unload_Prio AND  #At_Exit) OR #Box_Stop_Request_Array_1[3] OR #Box_Stop_Request_Array_1[2]  THEN
+	            #Stop_Request_1 := True;
+	        ELSE
+	            #Stop_Request_1 := False;
+	        END_IF;
+	        
+	        #Box_Request_Array[1] := #Load_From_Floor_1;
+	        #Box_Request_Array[2] := #Load_From_Floor_2;
+	        #Box_Request_Array[3] := #Load_From_Floor_3;
+	        
+	        IF NOT #Load_Request_Mode_1 AND NOT #Go_To_Unload_Prio THEN
+	            FOR #i := 1 TO 3 DO
+	                IF #Box_Request_Array[#i] THEN
+	                    #Choose_LoadFloor_Mode_1 := #i;
+	                    #Box_Stop_Request_Array_1[#i] := True;
+	                    #Load_Request_Mode_1 := True;
+	                    EXIT;
+	                END_IF;
+	            END_FOR;
+	        END_IF;
+	       
+	        // Check Current Floor
+	        
+	        IF #Floor_1_Low = True AND #Floor_1_High = True THEN
+	            #CurrentFloor := 1;
+	        ELSIF #Floor_2_Low = True AND #Floor_2_High = True THEN
+	            #CurrentFloor := 2;
+	        ELSIF #Floor_3_Low = True AND #Floor_3_High = True THEN
+	            #CurrentFloor := 3;
+	        //ELSE
+	           // #Elevetor_On_Base_Floor := False;
+	        END_IF;
+	        
+	        // Goto_Load
+	        // 
+	     
+	        IF #CurrentFloor <> #Choose_LoadFloor_Mode_1 AND NOT #At_Exit AND #Load_Request_Mode_1 THEN
+	            #Go_To_Load_Priority := True;
+	            IF #Choose_LoadFloor_Mode_1 > #CurrentFloor THEN
+	                #MotorUp := TRUE;
+	                #MotorDown := FALSE;
+	            ELSIF #Choose_LoadFloor_Mode_1 < #CurrentFloor THEN
+	                #MotorUp := FALSE;
+	                #MotorDown := TRUE;
+	            END_IF;
+	        END_IF;
+	    
+	        IF (#Choose_LoadFloor_Mode_1 <> 1 AND #CurrentFloor = #Choose_LoadFloor_Mode_1) AND NOT #At_Exit THEN   // Load 
+	            #MotorUp := FALSE;
+	            #MotorDown := FALSE;
+	            #Load_Object := True;
+	            #Go_To_Unload_Prio := True;
+	            
+	            #Motor_Slow := False;
+	            #Go_To_Load_Priority := False;
+	            #Load_Request_Mode_1 := False;
+	        ELSIF (#Choose_LoadFloor_Mode_1 = 1 AND #CurrentFloor = #Choose_LoadFloor_Mode_1) AND NOT #At_Exit THEN
+	            #MotorUp := FALSE;
+	            #MotorDown := FALSE;
+	            #Load_Object := True;
+	            #Go_To_Load_Priority := False;
+	            #Load_Request_1_Level := 1;
+	        ELSE
+	            #Load_Object := False; 
+	            #Box_Stop_Request_Array_1[1] := False;
+	            #Go_To_Unload_Prio := False;
+	        END_IF;
+	            
+	        IF #Load_Request_Mode_1 THEN
+	            CASE #Choose_LoadFloor_Mode_1 OF
+	                    
+	                1:
+	                    IF #Floor_1_Low THEN
+	                        #Motor_Slow := True;
+	                    END_IF;
+	                2:
+	                    IF #Floor_2_Low THEN
+	                        #Motor_Slow := True;
+	                    END_IF;
+	                3:
+	                    IF #Floor_3_Low THEN
+	                        #Motor_Slow := True;
+	                    END_IF;
+	            END_CASE;
+	        END_IF;
+	 
+	        // GoTo Unload 
+	        
+	        CASE #Load_Request_1_Level OF     
+	            0:
+	                IF #CurrentFloor <> #Load_Unload_Base_Floor AND #At_Exit AND NOT #Go_To_Load_Priority THEN
+	                    #Go_To_Unload_Prio := True;
+	                    #Box_Stop_Request_Array_1[1] := False;
+	                    #Box_Stop_Request_Array_1[2] := False;
+	                    #Box_Stop_Request_Array_1[3] := False;
+	                     
+	                    IF #Load_Unload_Base_Floor > #CurrentFloor THEN
+	                        #MotorUp := TRUE;
+	                        #MotorDown := FALSE;
+	                    ELSIF #Load_Unload_Base_Floor < #CurrentFloor THEN
+	                        #MotorUp := FALSE;
+	                        #MotorDown := TRUE;
+	                    END_IF;
+	                       
+	                ELSIF #CurrentFloor = #Load_Unload_Base_Floor AND #At_Exit THEN   // Unload 
+	                    #MotorUp := FALSE;
+	                    #MotorDown := FALSE;
+	                    #Load_Object := TRUE;
+	                    #Go_To_Load_Priority := True;
+	                ELSIF #CurrentFloor = #Load_Unload_Base_Floor AND NOT #At_Exit AND NOT #Go_To_Unload_Prio THEN
+	                    #Load_Object := FALSE;
+	                    #Go_To_Unload_Prio := False;
+	                END_IF;
+	                	                
+	            1:
+	                IF NOT #At_Exit AND NOT #Go_To_Load_Priority THEN
+	                    #MotorUp := FALSE;
+	                    #MotorDown := FALSE;
+	                ELSE
+	                    #Load_Object := False;
+	                    #Load_Request_1_Level := 0;
+	                    #Load_Request_Mode_1 := False;
+	                    #Motor_Slow := False;
+	                    
+	                END_IF;       
+	        END_CASE;
+	END_CASE;
+	
+END_FUNCTION_BLOCK
+

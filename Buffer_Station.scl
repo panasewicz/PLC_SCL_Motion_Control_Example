@@ -1,0 +1,45 @@
+﻿FUNCTION_BLOCK "Buffer_Station"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Work_Request : Bool;
+      Blade_Delay : Time;
+      Rest_Delay : Time;
+   END_VAR
+
+   VAR_OUTPUT 
+      StopBlade_Status : Bool;
+   END_VAR
+
+   VAR 
+      Work : Bool;
+      R_Trig_IN {InstructionName := 'R_TRIG'; LibVersion := '1.0'} : R_TRIG;
+      F_Trig_Delay {InstructionName := 'F_TRIG'; LibVersion := '1.0'} : F_TRIG;
+      Delay_Blade {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+      Delay_Rest_Position {InstructionName := 'TOF_TIME'; LibVersion := '1.0'; S7_SetPoint := 'False'} : TOF_TIME;
+   END_VAR
+
+
+BEGIN
+	#F_Trig_Delay(CLK := #Work_Request);
+	
+	#Delay_Blade(IN := #Work_Request,
+	             PT := #Blade_Delay);
+	#Delay_Rest_Position(IN := #F_Trig_Delay.Q,
+	                     PT := #Rest_Delay);
+	
+	
+	IF #Delay_Blade.Q OR #Delay_Rest_Position.Q THEN
+	    #Work := True;
+	ELSE
+	    #Work := False;
+	END_IF;
+	
+	// Controlling the Output
+	IF #Work THEN
+	    #StopBlade_Status := TRUE;
+	ELSE
+	    #StopBlade_Status := FALSE;
+	END_IF;
+END_FUNCTION_BLOCK
+

@@ -1,0 +1,62 @@
+﻿FUNCTION_BLOCK "Picker_Station"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Start_Pick : Bool;
+      Item_Detected : Bool;
+      Detection_Moving_Z : Bool;
+      Detection_Moving_X : Bool;
+      Place_Sensor : Bool;
+   END_VAR
+
+   VAR_OUTPUT 
+      ZMovement : Bool;
+      XMovement : Bool;
+      Pick : Bool := False;
+   END_VAR
+
+   VAR 
+      Step_Ok : Int := 0;
+   END_VAR
+
+BEGIN
+	
+	CASE #Step_Ok OF
+	        // Step 0 - Step for picking, moving in Z and X axises
+	    0:
+	        IF #Start_Pick AND NOT #Item_Detected AND NOT #Detection_Moving_X THEN
+	            #ZMovement := True;
+	        ELSIF #Start_Pick AND #Item_Detected AND NOT #Detection_Moving_X  THEN
+	            #Pick := True;
+	            #ZMovement := False;
+	        ELSIF #Pick AND NOT #Detection_Moving_Z AND NOT #Detection_Moving_X THEN
+	            #XMovement := TRUE;
+	        END_IF;
+	        ;
+	        IF #Detection_Moving_X AND #Pick THEN
+	            #Step_Ok := 1;
+	        END_IF;
+	        ;
+	        // Step 1 - Step for place, pick realese 
+	    1:
+	        IF #XMovement AND NOT #Detection_Moving_X AND NOT #Place_Sensor THEN
+	            #ZMovement := True;
+	        END_IF;
+	        IF #ZMovement AND #Place_Sensor THEN
+	            #Pick := False;
+	            #Step_Ok := 2;
+	        END_IF;
+	        // Step 2 - Back to the base position
+	    2:
+	        #ZMovement := False;
+	        IF #XMovement AND NOT #Detection_Moving_Z THEN
+	            #XMovement := False;
+	        END_IF;
+	        IF #Detection_Moving_X AND NOT #Pick THEN
+	            #Step_Ok := 0;
+	        END_IF;
+	        
+	END_CASE;
+	
+END_FUNCTION_BLOCK
+
